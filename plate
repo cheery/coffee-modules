@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+from asyncio import schedule
+from asyncio.http import Server
+from asyncio.log import Logger
+from asyncio.filehost import FileHost
+import sys, os, shutil, webbrowser, json
+
+log = Logger(sys.stdout, sys.stdout)
+directory = sys.argv[1] if len(sys.argv) > 1 else "."
+port      = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
+filehost = FileHost(directory)
+if os.path.islink(__file__):
+    __file__ = os.readlink(__file__)
+plate_directory = os.path.dirname(os.path.abspath(__file__))
+
+def main():
+    indextemplate = os.path.join(plate_directory, 'template', 'index.html')
+    indexfile = os.path.join(directory, 'index.html')
+    if not os.path.exists(indexfile):
+        log.info("index.html was created for you")
+        shutil.copyfile(indextemplate, indexfile)
+    server = Server(http, log, port=port)
+    schedule(server.run)
+    schedule(open_browser)
+    schedule.run()
+
+def open_browser():
+    if webbrowser.open('localhost:%i' % port):
+        log.info("opened browser for you")
+
+def http(request, response):
+    if request.path == '/manifest.json':
+        return json.dumps(manifest(directory))
+    try:
+        if request.path.startswith('/lib') and request.path.endswith('.js'):
+            response['Content-Type'] = 'application/ecmascript'
+            return fetch(request.path[1:])
+    except IOError:
+        pass
+    return filehost(request, response)
+
+def manifest(directory):
+    entries = []
+    for basedir, directories, files in os.walk(directory):
+        basedir = os.path.relpath(basedir, directory)
+        entries.append({"path": basedir, "type": "directory"})
+        for name in files:
+            path = os.path.join(basedir, name)
+            entries.append({"path": path, "type": "file"})
+    return entries
+
+#    modules = {"type":"directory", "files":{}}
+#    for basedir, directories, files in os.walk(directory):
+#        for name in files:
+#            path = os.path.join(basedir, name)
+#            path = os.path.relpath(path, directory)
+#            ext  = os.path.splitext(path)[1]
+#            if os.path.basename(path).startswith('.'):
+#                continue
+#            manifest_store(modules, path, ext)
+#    return modules
+#
+#def manifest_store(modules, path, ext):
+#    if '/' in path:
+#        for name in os.path.dirname(path).split('/'):
+#            files = modules["files"]
+#            if name in files:
+#                modules = files[name]
+#            else:
+#                modules = files[name] = {"type":"directory", "files":{}}
+#    name = os.path.basename(path)
+#    modules["files"][name] = {"type":"file", "ext":ext, "url":path}
+
+def fetch(path):
+    path = os.path.join(plate_directory, path)
+    with open(path) as fd:
+        return fd.read()
+
+if __name__=='__main__':
+    main()
